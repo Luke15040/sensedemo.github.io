@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sensory Mapping</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0a; color: #e0e0e0; font-family: 'Space Mono', 'Courier New', monospace; overflow: hidden; height: 100vh; }
+  
+  .app { margin: 0; padding: 1.5rem 2.5rem; height: 100vh; display: flex; flex-direction: column; }
+  
+  .header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 1.25rem; }
+  .header h1 { font-size: 13px; font-weight: 400; letter-spacing: 0.2em; text-transform: uppercase; color: #555; }
+  
+  .toggle { display: flex; background: #0f0f0f; border-radius: 20px; padding: 2px; border: 1px solid #1a1a1a; }
+  .toggle button {
+    background: transparent; border: none; border-radius: 18px; padding: 5px 20px; cursor: pointer;
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #333;
+    font-family: 'Space Mono', 'Courier New', monospace; transition: all 0.2s;
+  }
+  .toggle button.active { background: #1a1a1a; color: #aaa; }
+  
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 1rem; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #444; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; box-sizing: border-box; }
+  
+  .main { display: flex; flex: 1 1 0; min-height: 0; position: relative; justify-content: center; align-items: center; }
+  .map-area { width: 100%; height: 100%; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; transition: opacity 0.4s ease; }
+  
+  .detail-panel {
+    position: absolute; right: 0; top: 0; bottom: 0;
+    width: 280px; padding: 1.25rem;
+    background: #0a0a0a;
+    border-left: 1px solid #1a1a1a;
+    overflow-y: auto; z-index: 20;
+    animation: fadeIn 0.2s ease;
+  }
+  .detail-panel.empty {
+    display: none;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+  
+  .detail-panel .cat-label { font-size: 9px; color: #444; letter-spacing: 0.15em; text-transform: uppercase; margin: 0 0 4px; }
+  .detail-panel h2 { font-size: 14px; font-weight: 400; color: #e0e0e0; margin: 0; line-height: 1.4; font-family: 'Space Mono', 'Courier New', monospace; }
+  .detail-panel .close-btn { background: transparent; border: none; color: #444; cursor: pointer; font-size: 16px; padding: 2px 4px; line-height: 1; font-family: 'Space Mono', monospace; }
+  .detail-panel .icon-circle {
+    width: 48px; height: 48px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 1.25rem;
+  }
+  .detail-panel .desc { font-size: 12px; line-height: 1.7; color: #777; margin: 0 0 1rem; }
+  .detail-panel .section-label { font-size: 9px; color: #555; letter-spacing: 0.15em; text-transform: uppercase; margin: 0 0 6px; }
+  .detail-panel .examples { font-size: 11px; line-height: 1.65; color: #555; margin: 0 0 1.5rem; }
+  
+  .conn-btn {
+    background: transparent; border: none; cursor: pointer;
+    display: flex; align-items: center; gap: 8px; padding: 5px 0; text-align: left; width: 100%;
+  }
+  .conn-btn .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; box-sizing: border-box; }
+  .conn-btn .name { font-size: 11px; color: #555; font-family: 'Space Mono', 'Courier New', monospace; }
+  .conn-btn .arrow { font-size: 10px; color: #222; margin-left: auto; }
+  
+  .no-equiv { font-size: 11px; color: #333; font-style: italic; margin: 0; padding-top: 8px; border-top: 1px solid #111; }
+  
+  #map-svg { width: 100%; height: 100%; max-height: 100%; }
+  #canvas-3d { width: 100%; height: 100%; display: block; cursor: grab; }
+  
+  .hover-label-3d {
+    position: absolute; pointer-events: none;
+    font: 11px 'Space Mono', 'Courier New', monospace; color: #aaa;
+    background: rgba(5,5,5,0.92); padding: 3px 9px; border-radius: 4px;
+    border: 1px solid #1a1a1a; opacity: 0; transition: opacity 0.12s;
+    white-space: nowrap; z-index: 10;
+  }
+  
+  @media (max-width: 768px) {
+    body { overflow: auto; height: auto; }
+    .app { height: auto; padding: 1rem; }
+    .main { min-height: 500px; }
+    .map-area { min-height: 350px; }
+    .detail-panel { width: 100%; right: 0; left: 0; top: auto; bottom: 0; height: auto; max-height: 50vh; border-left: none; border-top: 1px solid #1a1a1a; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="header">
+    <div>
+      <h1>Sensory mapping</h1>
+    </div>
+    <div class="toggle">
+      <button id="btn-2d" class="active" onclick="setMode('2d')">2d</button>
+      <button id="btn-3d" onclick="setMode('3d')">3d</button>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot" style="background:#1D9E75;"></span>Natural</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#1D9E75; border:2px solid #9b8adb;"></span>Natural (human)</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#D85A30;"></span>Machine</div>
+  </div>
+
+  <div class="main" id="main">
+    <div class="map-area" id="map-area"></div>
+    <div class="detail-panel empty" id="detail-panel"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ─── DATA ────────────────────────────────────────────────────────────
+const COLORS = {
+  natural: { fill:"#1D9E75", hex:0x1D9E75 },
+  human:   { fill:"#1D9E75", hex:0x1D9E75, stroke:"#9b8adb", strokeHex:0x9b8adb },
+  machine: { fill:"#D85A30", hex:0xD85A30 },
+};
+
+const ICONS = {
+  hand:`<path d="M18 11V6a2 2 0 0 0-4 0v5m0 0V4a2 2 0 0 0-4 0v7m0 0V6a2 2 0 0 0-4 0v7m8-5v5a6 6 0 0 1-6 6h0a6 6 0 0 1-6-6V9a2 2 0 0 1 4 0v2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+  eye:`<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/>`,
+  ear:`<path d="M6 8.5a6.5 6.5 0 1 1 13 0c0 6-6 6.5-6 10a3.5 3.5 0 1 1-7 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M15 8.5a2.5 2.5 0 0 0-5 0v1a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  wind:`<path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2m14.6-8.8a2 2 0 1 1 1.4 3.5H2m11.3 12.6a2 2 0 1 0 1.4-3.5H2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+  droplets:`<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z" stroke="currentColor" stroke-width="1.5" fill="none"/>`,
+  activity:`<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+  heart:`<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+  zap:`<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/>`,
+  timer:`<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none"/><polyline points="12 6 12 12 16 14" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  gauge:`<path d="M12 16v-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M4.9 19.1C2 16.2 2 11.8 4.9 8.9s8.3-2.9 11.2 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  nav:`<polygon points="3 11 22 2 13 21 11 13 3 11" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/>`,
+  thermo:`<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" stroke="currentColor" stroke-width="1.5" fill="none"/>`,
+  compass:`<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" stroke="currentColor" stroke-width="1.5" fill="none"/>`,
+  radar:`<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 12l6-6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  vibrate:`<rect x="8" y="4" width="8" height="16" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M4 10v4m16-4v4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  radio:`<circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  waves:`<path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2s2.4 2 5 2c2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2s2.4 2 5 2c2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+  aperture:`<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none"/><line x1="14.31" y1="8" x2="20.05" y2="17.94" stroke="currentColor" stroke-width="1.5"/><line x1="9.69" y1="8" x2="21.17" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="7.38" y1="12" x2="13.12" y2="2.06" stroke="currentColor" stroke-width="1.5"/>`,
+  sun:`<circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  bug:`<rect x="8" y="6" width="8" height="14" rx="4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M8 10h8M8 14h8M12 6V2m-5.3 4.5L4 4m12.6 2.5L20 4M4 13H2m2 4-2 2m18-6h-2m0 4 2 2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  moon:`<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="1.5" fill="none"/>`,
+  flower:`<path d="M12 7.5a4.5 4.5 0 1 1 4.5 4.5M12 7.5A4.5 4.5 0 1 0 7.5 12M12 7.5V9m4.5 3a4.5 4.5 0 1 1-4.5 4.5m4.5-4.5H15M12 16.5a4.5 4.5 0 1 1-4.5-4.5m4.5 4.5V15M7.5 12a4.5 4.5 0 1 1 4.5-4.5M7.5 12H9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.5" fill="none"/>`,
+  fish:`<path d="M6.5 12c3-6 10-6 13.5-1-3.5 5-10.5 5-13.5-1z" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M4 10.5c-1.5-.8-2-2.5-2-4.5 2.5 0 4 1 5 2.5M4 13.5c-1.5.8-2 2.5-2 4.5 2.5 0 4-1 5-2.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><circle cx="16" cy="12" r="0.5" fill="currentColor"/>`,
+  cloud:`<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/>`,
+  circle:`<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/>`,
+  finger:`<rect x="6" y="2" width="12" height="20" rx="6" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 2v4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  brain:`<path d="M9.5 2a3 3 0 0 0-2.83 4 3 3 0 1 0-.37 5.5 3 3 0 0 0 3.2 4.45 3 3 0 0 0 5 0 3 3 0 0 0 3.2-4.45 3 3 0 1 0-.37-5.5 3 3 0 0 0-2.83-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M12 2v20" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-dasharray="2 3"/>`,
+  scan:`<path d="M3 7V5a2 2 0 0 1 2-2h2m10 0h2a2 2 0 0 1 2 2v2m0 10v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="1.5"/>`,
+  cable:`<path d="M4 20h4m12-12h-4M15 4l-1 4-6 4-1 4m-3 0h4m12-12h-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+  flask:`<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.13A1 1 0 0 0 5.606 22h12.788a1 1 0 0 0 .886-1.87l-5.069-9.707A2 2 0 0 1 14 9.527V2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M8.5 2h7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  micro:`<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 18a6 6 0 0 0 0-12" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M12 14a2 2 0 0 0 0-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  radiation:`<circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 10V2a8 8 0 0 1 6.93 4M12 14v8a8 8 0 0 1-6.93-4M10.27 12.27 4 8a8 8 0 0 1-.07 8M13.73 11.73 20 8a8 8 0 0 0 .07 8" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  users:`<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
+  branch:`<line x1="6" y1="3" x2="6" y2="15" stroke="currentColor" stroke-width="1.5"/><circle cx="18" cy="6" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M18 9a9 9 0 0 1-9 9" stroke="currentColor" stroke-width="1.5" fill="none"/>`,
+  network:`<circle cx="12" cy="5" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="5" cy="19" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="19" cy="19" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/><line x1="12" y1="8" x2="5" y2="16" stroke="currentColor" stroke-width="1.5"/><line x1="12" y1="8" x2="19" y2="16" stroke="currentColor" stroke-width="1.5"/>`,
+};
+
+// di: 0=distributed, 1=individual (2D y)
+// cu: 0=unconscious, 1=conscious (2D x)
+// px: 0=proximal, 1=distal (3D depth)
+const S = [
+  // ─── HUMAN ────────────────────────────────────────────────────────
+  { id:"touch", n:"Touch", c:"human", ic:"hand", di:0.88, cu:0.8, px:0.05,
+    d:"Mechanoreceptors across the skin transduce pressure, vibration and texture into nerve signal.",
+    ex:"Present in all vertebrates. Star-nosed mole has 25,000+ receptors in 22 appendages. Manatees sense water currents through body hairs.",
+    cn:["cap_sensor","nociception","thermocep","whiskers","lat_line"] },
+  { id:"sight", n:"Sight", c:"human", ic:"eye", di:0.85, cu:0.95, px:0.78,
+    d:"Retinal photoreceptors convert visible electromagnetic radiation into neural impulses.",
+    ex:"Mantis shrimp sees 16 color channels vs. human 3. Eagles resolve detail 4-8x sharper. Deep-sea fish detect bioluminescence in near-total darkness.",
+    cn:["camera","aug_color","pol_light","ir_pitviper","lidar"] },
+  { id:"hearing", n:"Hearing", c:"human", ic:"ear", di:0.82, cu:0.92, px:0.88,
+    d:"Cochlear hair cells transduce acoustic pressure waves into electrical signal.",
+    ex:"Greater wax moth hears up to 300 kHz — highest known in nature. Elephants communicate via infrasound below 20 Hz across kilometers. Sound travels through walls and around corners — omnidirectional and unbounded by line of sight.",
+    cn:["microphone","echoloc","sonar","ultrasonic"] },
+  { id:"smell", n:"Smell", c:"human", ic:"wind", di:0.78, cu:0.78, px:0.5,
+    d:"Olfactory receptors in nasal epithelium recognize volatile molecules by shape and vibration.",
+    ex:"Dogs: ~300 million olfactory receptors vs. human 6 million. Bears smell food from 30 km. Humans still outperform machines at detecting certain thiols.",
+    cn:["voc","chemo_moth","spectrometer"] },
+  { id:"taste_h", n:"Taste", c:"human", ic:"droplets", di:0.88, cu:0.85, px:0.03,
+    d:"Taste buds discriminate five qualities: sweet, salty, sour, bitter, umami.",
+    ex:"Humans have ~10,000 taste buds. Catfish have 175,000+. Our cortical processing adds nuance through cross-modal integration with smell.",
+    cn:["taste_catfish","ph_meter"] },
+  { id:"proprioc", n:"Proprioception", c:"human", ic:"activity", di:0.92, cu:0.08, px:0.03,
+    d:"Muscle spindles and Golgi tendon organs report position and tension of each body segment.",
+    ex:"Present across all vertebrates. Octopus arms have independent proprioceptive loops separate from the brain.",
+    cn:["accel","vestibular"] },
+  { id:"interoc", n:"Interoception", c:"human", ic:"heart", di:0.95, cu:0.05, px:0.02,
+    d:"Visceral afferents monitor internal state: heartbeat, respiration, hunger, emotional arousal.",
+    ex:"Higher interoceptive accuracy correlates with more intense emotional experience. No direct machine equivalent exists.",
+    cn:["barocep","ph_meter"] },
+  { id:"nociception", n:"Nociception", c:"human", ic:"zap", di:0.9, cu:0.5, px:0.04,
+    d:"Nociceptors signal actual or potential tissue damage through Aδ and C fibers.",
+    ex:"Present in all vertebrates. Whether invertebrates experience pain is debated — nociceptive reflexes exist but subjective suffering is uncertain.",
+    cn:["touch","thermocep"] },
+  { id:"thermocep", n:"Thermoception", c:"human", ic:"thermo", di:0.88, cu:0.35, px:0.08,
+    d:"TRP receptors in the skin respond to thermal gradients — warm and cold as separate channels.",
+    ex:"Vampire bats have infrared-sensitive pit organs around the nose to locate blood vessels from centimeters away.",
+    cn:["thermo_vis","ir_pitviper","thermo_mel","touch","nociception"] },
+  { id:"vestibular", n:"Vestibular system", c:"human", ic:"nav", di:0.92, cu:0.07, px:0.03,
+    d:"Semicircular canals and otoliths measure angular and linear acceleration.",
+    ex:"Birds use vestibular input for flight stabilization. Cuttlefish use statocysts — an analogous organ.",
+    cn:["accel","proprioc"] },
+  { id:"chronocep", n:"Chronoception", c:"human", ic:"timer", di:0.85, cu:0.04, px:0.05,
+    d:"Subjective perception of time, mediated by suprachiasmatic nuclei and basal ganglia.",
+    ex:"Entirely internal — no external receptor. Dopamine modulates time perception: stimulants make time feel slower.",
+    cn:[] },
+  { id:"barocep", n:"Baroception", c:"human", ic:"gauge", di:0.92, cu:0.03, px:0.02,
+    d:"Baroreceptors in carotid sinus and aortic arch detect blood pressure variations.",
+    ex:"Operates entirely below awareness. Some deep-sea fish have specialized baroreceptors for depth regulation.",
+    cn:["barometer","interoc"] },
+
+  // ─── NATURAL ──────────────────────────────────────────────────────
+  { id:"vibr_comm", n:"Vibrational communication", c:"natural", ic:"vibrate", di:0.38, cu:0.3, px:0.1,
+    d:"Signals transmitted through substrate vibrations — leaves, webs, soil.",
+    ex:"Spiders, planthoppers, treehoppers, termites. Elephants detect seismic vibrations through their feet across kilometers.",
+    cn:["whiskers","lat_line"] },
+  { id:"whiskers", n:"Whiskers", c:"natural", ic:"radio", di:0.75, cu:0.65, px:0.06,
+    d:"Hypersensitive tactile hairs detect micro-vibrations and air currents.",
+    ex:"Cats, seals, rats, walruses. Harbor seals track hydrodynamic trails left by fish up to 180 seconds after passage.",
+    cn:["touch","cap_sensor","lat_line"] },
+  { id:"echoloc", n:"Echolocation", c:"natural", ic:"radar", di:0.7, cu:0.9, px:0.8,
+    d:"Ultrasound emission and echo analysis reconstruct spatial geometry from return time and frequency shift.",
+    ex:"Bats, dolphins, some shrews, oilbirds, cave swiftlets. Dolphins detect a golf ball-sized object at 100+ meters.",
+    cn:["sonar","ultrasonic","hearing"] },
+  { id:"chem_plant", n:"Chemical reception (plants)", c:"natural", ic:"flower", di:0.18, cu:0.02, px:0.15,
+    d:"Plants detect signal molecules — ethylene, jasmonic acid — and activate defensive or growth responses.",
+    ex:"Acacia trees release ethylene when grazed, warning neighbors to increase tannin production within minutes.",
+    cn:["co2","ph_meter","voc"] },
+  { id:"electrorec", n:"Electroreception", c:"natural", ic:"zap", di:0.72, cu:0.5, px:0.18,
+    d:"Weak electric fields perceived through ampullae of Lorenzini — mapping prey bioelectric signatures.",
+    ex:"Sharks, rays, platypus, electric eels, elephantfish. Platypus hunts with eyes closed using electroreception alone.",
+    cn:["cap_sensor"] },
+  { id:"pol_light", n:"Polarized light vision", c:"natural", ic:"aperture", di:0.7, cu:0.8, px:0.75,
+    d:"Detection of light polarization plane for orientation and communication.",
+    ex:"Mantis shrimp (most complex), bees, ants, cuttlefish. Used for navigation, prey detection and secret signaling invisible to predators.",
+    cn:["sight","camera","aug_color"] },
+  { id:"ir_pitviper", n:"Infrared vision", c:"natural", ic:"sun", di:0.75, cu:0.85, px:0.55,
+    d:"Pit organs detect infrared radiation from prey — a biological thermal camera fused with vision.",
+    ex:"Pit vipers, some boas and pythons. Sensitivity is extreme — detects 0.003°C changes.",
+    cn:["thermocep","thermo_vis","thermo_mel"] },
+  { id:"hygrorec", n:"Hygroreception", c:"natural", ic:"cloud", di:0.68, cu:0.2, px:0.15,
+    d:"Specialized sensilla detect ambient humidity variations.",
+    ex:"Insects, woodlice, ticks, some arachnids. Desert beetles use hygrosensitive fog-collecting shell structures.",
+    cn:["hygrometer"] },
+  { id:"voc", n:"Volatile organic compounds", c:"natural", ic:"wind", di:0.22, cu:0.15, px:0.4,
+    d:"Detection of VOCs emitted by plants, bacteria and other organisms as chemical signals.",
+    ex:"Plants, bacteria, fungi. Parasitic wasps detect VOCs released by plants under caterpillar attack to locate hosts.",
+    cn:["smell","chemo_moth","spectrometer"] },
+  { id:"magnetocep", n:"Magnetoception — cryptochrome", c:"natural", ic:"compass", di:0.4, cu:0.22, px:0.88,
+    d:"Retinal cryptochrome overlays the earth's magnetic field onto visual perception — natural sensory augmentation.",
+    ex:"Migratory birds, sea turtles, lobsters, salmon, honeybees. European robins see magnetic field lines through quantum effects in cryptochrome proteins.",
+    cn:["magnetometer"] },
+  { id:"taste_catfish", n:"Full-body taste", c:"natural", ic:"fish", di:0.68, cu:0.6, px:0.04,
+    d:"Chemoreceptors across the entire body surface — the catfish is a tongue that swims.",
+    ex:"Catfish (175,000+ taste buds), some aquatic invertebrates. Enables hunting in zero-visibility murky water.",
+    cn:["taste_h","ph_meter"] },
+  { id:"lat_line", n:"Lateral line", c:"natural", ic:"waves", di:0.55, cu:0.38, px:0.1,
+    d:"Neuromast system detects water pressure and movement — touch at a distance through fluid.",
+    ex:"Fish, aquatic amphibians. Blind cavefish navigate entirely through lateral line input.",
+    cn:["touch","whiskers","ultrasonic"] },
+  { id:"thermo_mel", n:"Long-range thermoception", c:"natural", ic:"bug", di:0.72, cu:0.7, px:0.95,
+    d:"Thoracic infrared sensors detect forest fires from 80km away.",
+    ex:"Melanophila beetle. Flies toward active fires to lay eggs in freshly burned wood — no competition, no predators.",
+    cn:["thermocep","thermo_vis","ir_pitviper"] },
+  { id:"chemo_moth", n:"Long-range chemoreception", c:"natural", ic:"moon", di:0.65, cu:0.3, px:0.92,
+    d:"Antennae detect single pheromone molecules across kilometers.",
+    ex:"Moths (especially silk moths), some beetles. Male silk moth antenna has ~17,000 sensory hairs tuned to one molecular shape.",
+    cn:["smell","voc","spectrometer"] },
+
+  // ─── NATURAL — group/distributed ──────────────────────────────────
+  { id:"stigmergy", n:"Stigmergy", c:"natural", ic:"branch", di:0.05, cu:0.15, px:0.1,
+    d:"Indirect coordination through environmental traces — pheromone trails encode collective spatial memory.",
+    ex:"Ants, termites, social wasps. Army ants build living bridges with their bodies using stigmergic feedback loops.",
+    cn:["voc","chem_plant","www"] },
+  { id:"murmuration", n:"Swarm / murmuration", c:"natural", ic:"users", di:0.04, cu:0.45, px:0.3,
+    d:"Each individual senses only nearest neighbors, yet the group perceives threats and terrain collectively.",
+    ex:"Starlings, fish schools, locust swarms, krill. Information propagates through a starling flock faster than any individual's reaction time.",
+    cn:["lat_line","vibr_comm"] },
+  { id:"www", n:"Wood wide web", c:"natural", ic:"network", di:0.03, cu:0.02, px:0.25,
+    d:"Mycorrhizal networks transmit chemical signals and nutrients between trees — distributed sensing across hectares.",
+    ex:"Mycorrhizal fungi connecting forest trees. A single network can span an entire forest. Mother trees preferentially feed offspring through the network.",
+    cn:["chem_plant","stigmergy","voc"] },
+  { id:"dist_percep", n:"Distributed perception", c:"natural", ic:"brain", di:0.18, cu:0.55, px:0.05,
+    d:"Two-thirds of neurons reside in the arms. Each arm perceives, decides and acts semi-independently.",
+    ex:"Octopus. A severed arm continues to respond to stimuli and pass food toward where the mouth would be.",
+    cn:["touch","whiskers","electrorec"] },
+
+  // ─── MACHINE ──────────────────────────────────────────────────────
+  { id:"fiber_opt", n:"Distributed fiber optic sensing", c:"machine", ic:"cable", di:0.08, cu:0.1, px:0.4,
+    d:"Optical fibers spanning kilometers detect temperature, strain and vibrations along their full length.",
+    ex:"Pipeline monitoring, structural health of bridges, perimeter security. Single fiber replaces thousands of discrete sensors.",
+    cn:["vibr_comm"] },
+  { id:"ph_meter", n:"pH meter", c:"machine", ic:"flask", di:0.78, cu:0.12, px:0.03,
+    d:"Glass electrode measures hydrogen ion concentration — translates chemistry into number.",
+    ex:"Laboratory, industrial process control, water treatment, soil analysis, medical blood gas analyzers.",
+    cn:["taste_h","taste_catfish","chem_plant","interoc"] },
+  { id:"camera", n:"Camera", c:"machine", ic:"eye", di:0.72, cu:0.92, px:0.75,
+    d:"CMOS sensor converts photons to electrical signal on a pixel grid — artificial retina.",
+    ex:"Smartphones, satellites, medical endoscopes, autonomous vehicles, wildlife monitoring.",
+    cn:["sight","pol_light","aug_color"] },
+  { id:"lidar", n:"Lidar", c:"machine", ic:"scan", di:0.5, cu:0.88, px:0.95,
+    d:"Laser pulses measure point-by-point distance — builds 3D point clouds of space.",
+    ex:"Autonomous vehicles, archaeology (hidden cities under jungle canopy), forestry, atmospheric research.",
+    cn:["sight","radar_prox"] },
+  { id:"radar_prox", n:"Proximity radar", c:"machine", ic:"radar", di:0.65, cu:0.78, px:0.82,
+    d:"Short-range radio waves detect object presence and distance.",
+    ex:"Automotive parking sensors, industrial automation, gesture recognition, drone obstacle avoidance.",
+    cn:["lidar","ultrasonic"] },
+  { id:"thermo_vis", n:"Thermal imaging", c:"machine", ic:"thermo", di:0.65, cu:0.82, px:0.7,
+    d:"Microbolometers translate infrared radiation into thermal image — making heat visible.",
+    ex:"Firefighting, building insulation inspection, military, medical screening, wildlife surveys at night.",
+    cn:["thermocep","ir_pitviper","thermo_mel"] },
+  { id:"aug_color", n:"Augmented color spectrum", c:"machine", ic:"aperture", di:0.62, cu:0.78, px:0.72,
+    d:"Multispectral sensors extend vision beyond visible — UV, near-infrared, hyperspectral.",
+    ex:"Satellite remote sensing, precision agriculture, art restoration (hidden layers), mineralogy.",
+    cn:["sight","camera","pol_light"] },
+  { id:"co2", n:"CO₂ detection", c:"machine", ic:"circle", di:0.35, cu:0.1, px:0.4,
+    d:"NDIR sensors measure infrared absorption of CO₂.",
+    ex:"Indoor air quality, greenhouses, climate stations, breath analyzers, spacecraft life support.",
+    cn:["chem_plant","voc"] },
+  { id:"cap_sensor", n:"Capacitive sensor", c:"machine", ic:"finger", di:0.78, cu:0.45, px:0.04,
+    d:"Electrical capacitance variations detect proximity, pressure and presence — the machine's touch.",
+    ex:"Touchscreens, proximity switches, robotic skin, moisture detection, liquid level sensing.",
+    cn:["touch","whiskers","electrorec"] },
+  { id:"accel", n:"Accelerometer / gyroscope", c:"machine", ic:"activity", di:0.82, cu:0.08, px:0.03,
+    d:"Suspended MEMS masses measure linear and angular acceleration — the machine's vestibular system.",
+    ex:"Smartphones, vehicle stability, seismographs, inertial navigation, wearable step counters.",
+    cn:["proprioc","vestibular"] },
+  { id:"ultrasonic", n:"Ultrasonic sensor", c:"machine", ic:"waves", di:0.68, cu:0.72, px:0.6,
+    d:"Ultrasound emission and reception to measure distance — simplified artificial echolocation.",
+    ex:"Medical imaging, industrial flaw detection, parking sensors, robotic navigation.",
+    cn:["echoloc","sonar","hearing","lat_line"] },
+  { id:"hygrometer", n:"Hygrometer", c:"machine", ic:"cloud", di:0.72, cu:0.1, px:0.15,
+    d:"Capacitive or resistive sensors measure relative air humidity.",
+    ex:"Weather stations, HVAC, greenhouses, museums, semiconductor clean rooms.",
+    cn:["hygrorec"] },
+  { id:"spectrometer", n:"Spectrometer", c:"machine", ic:"micro", di:0.6, cu:0.72, px:0.85,
+    d:"Decomposes light into spectral components — reads the molecular signature of matter.",
+    ex:"Chemistry labs, astronomical observatories, food quality, gemology, forensics.",
+    cn:["smell","voc","chemo_moth","aug_color"] },
+  { id:"magnetometer", n:"Magnetometer", c:"machine", ic:"compass", di:0.55, cu:0.18, px:0.78,
+    d:"Hall effect sensor measures magnetic field intensity and direction.",
+    ex:"Smartphone compass, geological surveys, spacecraft orientation, archaeological prospection.",
+    cn:["magnetocep"] },
+  { id:"microphone", n:"Microphone", c:"machine", ic:"ear", di:0.72, cu:0.85, px:0.7,
+    d:"Diaphragm converts acoustic pressure waves to electrical signal — the machine's cochlea.",
+    ex:"Recording, communication, hearing aids, noise monitoring, voice assistants, acoustic ecology.",
+    cn:["hearing","echoloc","sonar"] },
+  { id:"barometer", n:"Barometer", c:"machine", ic:"gauge", di:0.78, cu:0.06, px:0.12,
+    d:"Piezoelectric membrane measures absolute atmospheric pressure.",
+    ex:"Weather forecasting, aviation altimeters, smartphones, diving computers.",
+    cn:["barocep"] },
+  { id:"geiger", n:"Geiger counter", c:"machine", ic:"radiation", di:0.7, cu:0.65, px:0.8,
+    d:"Ionized gas detects ionizing radiation — a perceptual channel with no natural equivalent.",
+    ex:"Nuclear facilities, medical radiology, geological dating, environmental monitoring, space missions.",
+    cn:[] },
+  { id:"sonar", n:"Sonar", c:"machine", ic:"waves", di:0.3, cu:0.78, px:0.9,
+    d:"Underwater acoustic pulses measure distance and shape — industrial echolocation.",
+    ex:"Submarine navigation, fishery surveys, seabed mapping, underwater archaeology, offshore oil.",
+    cn:["echoloc","hearing","microphone","ultrasonic"] },
+];
+
+const sMap = new Map(S.map(s => [s.id, s]));
+
+// ─── STATE ───────────────────────────────────────────────────────────
+let currentMode = '2d';
+let selectedId = null;
+let hoveredId = null;
+
+// ─── DETAIL PANEL ────────────────────────────────────────────────────
+function renderDetail() {
+  const panel = document.getElementById('detail-panel');
+  if (!selectedId) { panel.classList.add('empty'); panel.innerHTML = ''; return; }
+  panel.classList.remove('empty');
+  const s = sMap.get(selectedId);
+  const col = COLORS[s.c];
+  const catLabel = s.c === 'human' ? 'natural (human)' : s.c === 'natural' ? 'natural' : 'machine';
+  const sectionLabel = s.c === 'machine' ? 'Applications' : 'Found in';
+  const iconSvg = ICONS[s.ic] || '';
+  const borderCol = s.c === 'human' ? col.stroke + '44' : col.fill + '28';
+
+  let connHtml = '';
+  if (s.cn.length > 0) {
+    connHtml = `<p class="section-label" style="margin-top:0;margin-bottom:8px">Connections</p><div style="display:flex;flex-direction:column;gap:1px">`;
+    s.cn.forEach(cid => {
+      const t = sMap.get(cid);
+      if (!t) return;
+      const tc = COLORS[t.c];
+      const dotBorder = t.c === 'human' ? `border:1.5px solid ${COLORS.human.stroke};` : '';
+      connHtml += `<button class="conn-btn" data-nav="${cid}"><span class="dot" style="background:${tc.fill};${dotBorder}"></span><span class="name">${t.n}</span><span class="arrow">→</span></button>`;
+    });
+    connHtml += '</div>';
+  } else {
+    connHtml = `<p class="no-equiv">No known equivalent — unique perceptual channel.</p>`;
+  }
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
+      <div>
+        <p class="cat-label">${catLabel}</p>
+        <h2>${s.n}</h2>
+      </div>
+      <button class="close-btn" id="close-detail">×</button>
+    </div>
+    <div class="icon-circle" style="background:${col.fill}15;border:1px solid ${borderCol}">
+      <svg width="20" height="20" viewBox="0 0 24 24" style="color:${col.fill}">${iconSvg}</svg>
+    </div>
+    <p class="desc">${s.d}</p>
+    <p class="section-label">${sectionLabel}</p>
+    <p class="examples">${s.ex}</p>
+    ${connHtml}
+  `;
+
+  document.getElementById('close-detail').onclick = () => { selectSense(null); };
+  panel.querySelectorAll('.conn-btn').forEach(btn => {
+    btn.onclick = () => selectSense(btn.dataset.nav);
+  });
+}
+
+let lastSelectTime = 0;
+
+function selectSense(id) {
+  const now = Date.now();
+  if (now - lastSelectTime < 150) return; // debounce rapid calls
+  lastSelectTime = now;
+  selectedId = (selectedId === id) ? null : id;
+  renderDetail();
+  if (currentMode === '2d') render2D();
+}
+
+function forceSelect(id) {
+  const now = Date.now();
+  if (now - lastSelectTime < 150) return;
+  lastSelectTime = now;
+  selectedId = id;
+  renderDetail();
+}
+
+function forceDeselect() {
+  const now = Date.now();
+  if (now - lastSelectTime < 150) return;
+  lastSelectTime = now;
+  selectedId = null;
+  renderDetail();
+}
+
+// ─── 2D VIEW ─────────────────────────────────────────────────────────
+function render2D() {
+  const area = document.getElementById('map-area');
+  const mapW = 900, mapH = 750;
+  const sel = selectedId ? sMap.get(selectedId) : null;
+  const connSet = sel ? new Set(sel.cn) : new Set();
+
+  const getPos = (s) => ({
+    x: 60 + s.cu * (mapW - 120),
+    y: 55 + s.di * (mapH - 110),
+  });
+
+  let svg = `<svg id="map-svg" viewBox="0 0 ${mapW} ${mapH}" style="width:100%;height:auto;display:block">`;
+  svg += `<line x1="50" y1="${mapH/2}" x2="${mapW-50}" y2="${mapH/2}" stroke="#333" stroke-width="1"/>`;
+  svg += `<line x1="${mapW/2}" y1="40" x2="${mapW/2}" y2="${mapH-40}" stroke="#333" stroke-width="1"/>`;
+  svg += `<text x="50" y="${mapH/2-14}" fill="#777" font-size="13" font-family="'Space Mono','Courier New',monospace" text-anchor="start">latent</text>`;
+  svg += `<text x="${mapW-50}" y="${mapH/2-14}" fill="#777" font-size="13" font-family="'Space Mono','Courier New',monospace" text-anchor="end">manifest</text>`;
+  svg += `<text x="${mapW/2}" y="36" fill="#777" font-size="13" font-family="'Space Mono','Courier New',monospace" text-anchor="middle">distributed</text>`;
+  svg += `<text x="${mapW/2}" y="${mapH-26}" fill="#777" font-size="13" font-family="'Space Mono','Courier New',monospace" text-anchor="middle">individual</text>`;
+
+  if (sel) {
+    S.filter(s => connSet.has(s.id)).forEach(t => {
+      const f = getPos(sel), to = getPos(t);
+      svg += `<line x1="${f.x}" y1="${f.y}" x2="${to.x}" y2="${to.y}" stroke="#444" stroke-width="0.7" stroke-dasharray="4,5"/>`;
+    });
+  }
+
+  S.forEach(s => {
+    const p = getPos(s);
+    const isSel = s.id === selectedId;
+    const isConn = connSet.has(s.id);
+    const dimmed = selectedId && !isSel && !isConn;
+    const col = COLORS[s.c];
+    const r = isSel ? 10 : 7;
+    const opacity = dimmed ? 0.1 : 0.85;
+    const strokeAttr = s.c === 'human' ? `stroke="${COLORS.human.stroke}" stroke-width="2.5"` : '';
+
+    svg += `<g data-id="${s.id}" style="cursor:pointer;opacity:${opacity}">`;
+    if (isSel) svg += `<circle cx="${p.x}" cy="${p.y}" r="${r+7}" fill="${col.fill}" fill-opacity="0.15"/>`;
+    svg += `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${col.fill}" fill-opacity="0.85" ${strokeAttr}/>`;
+    if (isSel) svg += `<text x="${p.x}" y="${p.y-r-9}" fill="#888" font-size="12" text-anchor="middle" font-family="'Space Mono','Courier New',monospace">${s.n}</text>`;
+    svg += `</g>`;
+  });
+
+  svg += '</svg>';
+  area.innerHTML = svg;
+
+  // hover + click
+  area.querySelectorAll('g[data-id]').forEach(g => {
+    const id = g.dataset.id;
+    g.addEventListener('mouseenter', () => {
+      if (id === selectedId) return;
+      const s = sMap.get(id);
+      const circles = g.querySelectorAll('circle');
+      const mainCircle = circles[circles.length - 1];
+      const cx = mainCircle.getAttribute('cx'), cy = mainCircle.getAttribute('cy');
+      // add hover label
+      const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+      txt.setAttribute('x', cx);
+      txt.setAttribute('y', parseFloat(cy) - 18);
+      txt.setAttribute('fill', '#888');
+      txt.setAttribute('font-size', '12');
+      txt.setAttribute('text-anchor', 'middle');
+      txt.setAttribute('font-family', "'Space Mono','Courier New',monospace");
+      txt.setAttribute('class', 'hover-label');
+      txt.textContent = s.n;
+      g.appendChild(txt);
+      mainCircle.setAttribute('r', '9');
+    });
+    g.addEventListener('mouseleave', () => {
+      const hl = g.querySelector('.hover-label');
+      if (hl) hl.remove();
+      const circles = g.querySelectorAll('circle');
+      const mainCircle = circles[circles.length - 1];
+      if (id !== selectedId) mainCircle.setAttribute('r', '7');
+    });
+    g.addEventListener('click', () => selectSense(id));
+  });
+}
+
+// ─── 3D VIEW ─────────────────────────────────────────────────────────
+let threeCleanup = null;
+
+function init3D() {
+  const container = document.getElementById('map-area');
+  container.innerHTML = '';
+
+  const T = THREE;
+  const w = container.clientWidth;
+  const h = container.clientHeight || 480;
+
+  const scene = new T.Scene();
+  const cam = new T.PerspectiveCamera(30, w / h, 0.1, 200);
+  const renderer = new T.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x0a0a0a, 1);
+  container.appendChild(renderer.domElement);
+
+  // axes
+  const AL = 2.2;
+  const aM = new T.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.5 });
+  [[[-AL,0,0],[AL,0,0]],[[0,-AL,0],[0,AL,0]],[[0,0,-AL],[0,0,AL]]].forEach(([a,b]) => {
+    scene.add(new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(...a), new T.Vector3(...b)]), aM));
+  });
+
+  function mkLabel(text, pos) {
+    const c = document.createElement('canvas');
+    c.width = 320; c.height = 56;
+    const ctx = c.getContext('2d');
+    ctx.font = "20px 'Courier New', monospace";
+    ctx.fillStyle = '#666';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, 160, 34);
+    const mat = new T.SpriteMaterial({ map: new T.CanvasTexture(c), transparent: true, depthTest: false, opacity: 0.6 });
+    const sp = new T.Sprite(mat);
+    sp.position.set(...pos);
+    sp.scale.set(2.2, 0.4, 1);
+    scene.add(sp);
+  }
+
+  mkLabel('latent', [-AL-0.5, 0, 0]);
+  mkLabel('manifest', [AL+0.5, 0, 0]);
+  mkLabel('distributed', [0, AL+0.25, 0]);
+  mkLabel('individual', [0, -AL-0.3, 0]);
+  mkLabel('proximal', [0, 0, -AL-0.4]);
+  mkLabel('distal', [0, 0, AL+0.35]);
+
+  const SC = 3.2;
+  const visuals = [];   // small visible spheres
+  const hitTargets = []; // larger invisible spheres for raycasting
+  const idMap = new Map();
+  const rings = [];
+
+  S.forEach(s => {
+    const sx = (s.cu - 0.5) * SC;
+    const sy = (0.5 - s.di) * SC;
+    const sz = (s.px - 0.5) * SC;
+
+    // visible sphere
+    const geo = new T.SphereGeometry(0.1, 16, 12);
+    const mat = new T.MeshBasicMaterial({ color: COLORS[s.c].hex, transparent: true, opacity: 0.88 });
+    const mesh = new T.Mesh(geo, mat);
+    mesh.position.set(sx, sy, sz);
+    mesh.userData = { id: s.id };
+    scene.add(mesh);
+    visuals.push(mesh);
+    idMap.set(s.id, mesh);
+
+    // invisible hit target — much larger
+    const hitGeo = new T.SphereGeometry(0.28, 8, 6);
+    const hitMat = new T.MeshBasicMaterial({ visible: false });
+    const hitMesh = new T.Mesh(hitGeo, hitMat);
+    hitMesh.position.copy(mesh.position);
+    hitMesh.userData = { id: s.id };
+    scene.add(hitMesh);
+    hitTargets.push(hitMesh);
+
+    if (s.c === 'human') {
+      const rGeo = new T.RingGeometry(0.13, 0.17, 20);
+      const rMat = new T.MeshBasicMaterial({ color: 0x9b8adb, side: T.DoubleSide, transparent: true, opacity: 0.5 });
+      const ring = new T.Mesh(rGeo, rMat);
+      ring.position.copy(mesh.position);
+      scene.add(ring);
+      rings.push(ring);
+      mesh.userData.ring = ring;
+    }
+  });
+
+  const connGroup = new T.Group();
+  scene.add(connGroup);
+
+  // hover label
+  const hLabel = document.createElement('div');
+  hLabel.className = 'hover-label-3d';
+  container.style.position = 'relative';
+  container.appendChild(hLabel);
+
+  // camera orbit
+  let theta = Math.PI * 0.28, phi = Math.PI * 0.3, radius = 11;
+  let dragging = false, downXY = {x:0,y:0}, prevXY = {x:0,y:0};
+
+  function updateCam() {
+    cam.position.set(
+      radius * Math.sin(phi) * Math.sin(theta),
+      radius * Math.cos(phi),
+      radius * Math.sin(phi) * Math.cos(theta)
+    );
+    cam.lookAt(0,0,0);
+  }
+  updateCam();
+
+  const cv = renderer.domElement;
+
+  function rayHit(cx, cy) {
+    const rect = cv.getBoundingClientRect();
+    const mx = ((cx - rect.left) / rect.width) * 2 - 1;
+    const my = -((cy - rect.top) / rect.height) * 2 + 1;
+    const rc = new T.Raycaster();
+    rc.setFromCamera(new T.Vector2(mx, my), cam);
+    return rc.intersectObjects(hitTargets);
+  }
+
+  cv.addEventListener('mousedown', e => {
+    dragging = true;
+    downXY = {x:e.clientX, y:e.clientY};
+    prevXY = {...downXY};
+    cv.style.cursor = 'grabbing';
+  });
+
+  cv.addEventListener('mousemove', e => {
+    if (dragging) {
+      theta -= (e.clientX - prevXY.x) * 0.007;
+      phi = Math.max(0.15, Math.min(Math.PI - 0.15, phi + (e.clientY - prevXY.y) * 0.007));
+      prevXY = {x:e.clientX, y:e.clientY};
+      updateCam();
+      hLabel.style.opacity = '0';
+    } else {
+      const hits = rayHit(e.clientX, e.clientY);
+      if (hits.length) {
+        const s = sMap.get(hits[0].object.userData.id);
+        if (s) {
+          const rect = cv.getBoundingClientRect();
+          hLabel.textContent = s.n;
+          hLabel.style.left = (e.clientX - rect.left + 14) + 'px';
+          hLabel.style.top = (e.clientY - rect.top - 10) + 'px';
+          hLabel.style.opacity = '1';
+          cv.style.cursor = 'pointer';
+        }
+      } else {
+        hLabel.style.opacity = '0';
+        cv.style.cursor = 'grab';
+      }
+    }
+  });
+
+  cv.addEventListener('mouseup', e => {
+    const dist = Math.hypot(e.clientX - downXY.x, e.clientY - downXY.y);
+    dragging = false;
+    cv.style.cursor = 'grab';
+    if (dist < 6) {
+      const hits = rayHit(e.clientX, e.clientY);
+      if (hits.length) {
+        const hitId = hits[0].object.userData.id;
+        if (selectedId === hitId) forceDeselect();
+        else forceSelect(hitId);
+      } else {
+        forceDeselect();
+      }
+    }
+  });
+
+  cv.addEventListener('mouseleave', () => { dragging = false; cv.style.cursor = 'grab'; hLabel.style.opacity = '0'; });
+
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    radius = Math.max(6, Math.min(20, radius + e.deltaY * 0.005));
+    updateCam();
+  }, {passive: false});
+
+  // touch
+  let td0 = 0;
+  cv.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) { dragging = true; downXY = {x:e.touches[0].clientX, y:e.touches[0].clientY}; prevXY = {...downXY}; }
+    else if (e.touches.length === 2) { dragging = false; td0 = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY); }
+  }, {passive:true});
+  cv.addEventListener('touchmove', e => {
+    if (e.touches.length === 1 && dragging) {
+      const p = e.touches[0];
+      theta -= (p.clientX - prevXY.x) * 0.007;
+      phi = Math.max(0.15, Math.min(Math.PI-0.15, phi + (p.clientY - prevXY.y) * 0.007));
+      prevXY = {x:p.clientX, y:p.clientY};
+      updateCam();
+    } else if (e.touches.length === 2) {
+      const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      radius = Math.max(6, Math.min(20, radius - (d-td0)*0.015));
+      td0 = d; updateCam();
+    }
+  }, {passive:true});
+  cv.addEventListener('touchend', e => {
+    const ct = e.changedTouches[0];
+    const dist = Math.hypot(ct.clientX - downXY.x, ct.clientY - downXY.y);
+    dragging = false;
+    if (dist < 12) {
+      const hits = rayHit(ct.clientX, ct.clientY);
+      if (hits.length) {
+        const hitId = hits[0].object.userData.id;
+        if (selectedId === hitId) forceDeselect();
+        else forceSelect(hitId);
+      } else {
+        forceDeselect();
+      }
+    }
+  });
+
+  const connMat = new T.LineDashedMaterial({ color: 0x555555, transparent: true, opacity: 0.6, dashSize: 0.12, gapSize: 0.08 });
+  let animId;
+
+  function animate() {
+    animId = requestAnimationFrame(animate);
+    
+    // subtle auto-rotation when not dragging
+    if (!dragging) {
+      theta += 0.0008;
+      updateCam();
+    }
+    
+    rings.forEach(r => r.lookAt(cam.position));
+
+    while (connGroup.children.length) connGroup.remove(connGroup.children[0]);
+
+    if (selectedId) {
+      const selData = sMap.get(selectedId);
+      const selMesh = idMap.get(selectedId);
+      if (selData && selMesh) {
+        const connSet = new Set(selData.cn);
+        visuals.forEach(m => {
+          const isS = m.userData.id === selectedId;
+          const isC = connSet.has(m.userData.id);
+          m.material.opacity = (isS || isC) ? 0.92 : 0.06;
+          m.scale.setScalar(isS ? 1.8 : isC ? 1.3 : 1);
+          if (m.userData.ring) m.userData.ring.material.opacity = (isS || isC) ? 0.5 : 0.04;
+        });
+        selData.cn.forEach(cid => {
+          const t = idMap.get(cid);
+          if (t) { const g = new T.BufferGeometry().setFromPoints([selMesh.position, t.position]); const ln = new T.Line(g, connMat); ln.computeLineDistances(); connGroup.add(ln); }
+        });
+      }
+    } else {
+      visuals.forEach(m => { m.material.opacity = 0.88; m.scale.setScalar(1); if (m.userData.ring) m.userData.ring.material.opacity = 0.5; });
+    }
+
+    renderer.render(scene, cam);
+  }
+  animate();
+
+  const onResize = () => {
+    const nw = container.clientWidth;
+    const nh = container.clientHeight || 480;
+    cam.aspect = nw / nh;
+    cam.updateProjectionMatrix();
+    renderer.setSize(nw, nh);
+  };
+  window.addEventListener('resize', onResize);
+
+  threeCleanup = () => {
+    cancelAnimationFrame(animId);
+    window.removeEventListener('resize', onResize);
+    renderer.dispose();
+  };
+}
+
+// ─── MODE SWITCHING ──────────────────────────────────────────────────
+function setMode(mode) {
+  if (mode === currentMode) return;
+  selectedId = null;
+  renderDetail();
+
+  const mapArea = document.getElementById('map-area');
+  
+  // fade out
+  mapArea.style.opacity = '0';
+  
+  document.getElementById('btn-2d').classList.toggle('active', mode === '2d');
+  document.getElementById('btn-3d').classList.toggle('active', mode === '3d');
+
+  setTimeout(() => {
+    if (threeCleanup) { threeCleanup(); threeCleanup = null; }
+    currentMode = mode;
+    
+    if (mode === '2d') render2D();
+    else init3D();
+    
+    // fade in
+    requestAnimationFrame(() => { mapArea.style.opacity = '1'; });
+  }, 350);
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────
+render2D();
+</script>
+</body>
+</html>
